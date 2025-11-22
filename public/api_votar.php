@@ -15,6 +15,28 @@ try {
 // --- ROTA 1: BUSCAR O PRÓXIMO ITEM (GET) ---
 if ($method === 'GET') {
     $userId = $_GET['user_id'] ?? '';
+    $room = $_GET['room'] ?? '';
+    $check = $_GET['check'] ?? false;
+
+    if($check && $room){
+        $sql = "SELECT item_id, COUNT(DISTINCT user_id) as total from votes WHERE room_code = :room AND vote = 1 GROUP BY item_id HAVING total >= 2 LIMIT 1";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(['room' => $room]);
+        $matchData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if($matchData){
+            $stmtItem = $pdo->prepare("SELECT title, image_url FROM items WHERE id = ?");
+            $stmtItem->execute([$matchData['item_id']]);
+            $filme = $stmtItem->fetch(PDO::FETCH_ASSOC);
+
+            echo json_encode(['match' => true, 'data' => $filme]);   
+        }else{
+            echo json_encode(['match' => false]);
+        }
+        exit;
+            
+    }
     
     // Seleciona um filme que esse usuário AINDA NÃO votou
     // (Isso evita mostrar o mesmo filme duas vezes)
