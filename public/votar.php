@@ -98,6 +98,29 @@ if(!$sala) die("Sala inválida!");
 
         // Inicia carregando o primeiro
         carregarProximo();
+
+        setInterval(async function(params) {
+            if(!document.getElementById('modal-match').classList.contains('hidden')){
+                return;
+            }
+
+            try{
+                const res = await fetch(`api_votar.php?check=1&room=${salaCode}`);
+                const data = await res.json();
+
+                if(data.match){
+                    document.getElementById('modal-match').classList.remove('hidden');
+                    document.getElementById('titulo-match').innerText = data.data.title;
+                    document.getElementById('img-match').src = data.data.image_url;
+                    
+                    //Som de match! Comentar se quiser deixar mudo.
+                    if(navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                }
+            }catch(e){
+                console.log("Erro! Verificar match silencioso",e);
+            }
+        },3000);
+        carregarProximo();
     </script>
 </body>
 </html>
