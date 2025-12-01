@@ -1,51 +1,99 @@
 <?php
 require_once __DIR__ . "/../src/conecta.php";
-
+set_time_limit(300);
 $mensagem = '';
 $tipoMensagem = '';
+// php public/importar.php comando para dodar via terminal
+// SE ESTIVER RODANDO PELO TERMINAL (CLI)
+if (php_sapi_name() === 'cli') {
+    // Simula um POST com sua chave fixa pra não dar erro
+    $_SERVER['REQUEST_METHOD'] = 'POST';
+    $_POST['api_key'] = 'c942e42c5709ce00fe6772c631e4c760'; 
+    $paginas = 50; // Aqui no terminal pode abusar! Põe 10, 20...
+    echo "Rodando via Terminal... Aguarde...\n";
+}
 
 if($_SERVER['REQUEST_METHOD'] === 'POST'){
     $apiKey = $_POST['api_key'] ?? '';
+    // $paginas = 2;
 
     if(empty($apiKey)){
         $mensagem = "Por favor insira a chave de api";
         $tipoMensagem = "erro";
     }else{
-        $apiUrl = "https://api.themoviedb.org/3/trending/movie/week?api_key={$apiKey}&language=pt-BR";
+        $mapaGeneros = [];
 
-        $resposta = @file_get_contents($apiUrl);
+        function carregaGeneros($url,&$mapa){
+            $resp = @file_get_contents($url);
+            if ($resp) {
+                $json = json_decode($resp, true);
+                foreach ($json['genres'] as $g) {
+                    $mapa[$g['id']] = $g['name'];
+                }
+            }
+        }
 
-        if($resposta){
-            $dados = json_decode($resposta,true);
+        carregaGeneros("https://api.themoviedb.org/3/genre/movie/list?api_key={$apiKey}&language=pt-BR",$mapaGeneros);
+        carregaGeneros("https://api.themoviedb.org/3/genre/tv/list?api_key={$apiKey}&language=pt-BR",$mapaGeneros);
+        // $respGeneros = @file_get_contents($urlGeneros);
 
-            try{
-                $pdo = conexao::conectar();
 
-                $pdo->query('TRUNCATE TABLE items');
+        try{
+            $pdo = conexao::conectar();
 
-                $sql = "INSERT INTO items (title, image_url, category) VALUES (:titulo, :img, 'filme')";
-                $stmt = $pdo->prepare($sql);
+            $pdo->query('TRUNCATE TABLE items');
 
-                $contagem = 0;
+            $sql = "INSERT INTO items (title, image_url, category, genre, description, tmdb_id) VALUES (:titulo, :img, :cat, :genre, :desc, :tid)";
+            $stmt = $pdo->prepare($sql);
 
-                foreach($dados['results'] as $filme){
-                    if(!empty($filme['poster_path'])){
-                        $imagemCompleta = "https://image.tmdb.org/t/p/w500".$filme['poster_path'];
+            $contagem = 0;
 
-                        $stmt->execute([
-                            'titulo' => $filme['title'],
-                            'img' =>$imagemCompleta
-                        ]);
-                        $contagem++;
+            for($i = 1;$i <= $paginas;$i++){
+                $apiUrl = "https://api.themoviedb.org/3/trending/all/week?api_key={$apiKey}&language=pt-BR&page={$i}";
+                $resposta = @file_get_contents($apiUrl);
+
+                if($resposta){
+                    $dados = json_decode($resposta,true);
+                    foreach($dados['results'] as $filme){
+                        
+                        if(empty($filme['poster_path']) || $filme['media_type'] == 'person'){
+                            continue;
+                        }
+
+                        $titulo = $filme['title'] ?? $filme['name'] ?? "Sem Título";
+                        $categoria = ($filme['media_type'] == 'tv') ? 'serie' : 'filme';
+
+                        $idGenero = $filme['genre_ids'][0] ?? 0;
+                        $nomeGenero = $mapaGeneros[$idGenero] ?? 'Outros';
+                        $sinopse = $filme['overview'] ?? 'Sinopse não disponível.';
+
+                        if(!empty($filme['poster_path'])){
+                            $imagemCompleta = "https://image.tmdb.org/t/p/w500".$filme['poster_path'];
+
+                            $stmt->execute([
+                                'titulo' => $titulo,
+                                'img'    => $imagemCompleta,
+                                'cat'    => $categoria, // Salva 'filme' ou 'serie'
+                                'genre' => $nomeGenero,
+                                'desc'   => $sinopse,
+                                'tid'    => $filme['id']
+                            ]);
+                            $contagem++;
+                        }
                     }
                 }
-                $mensagem = "Sucesso! $contagem filmes foram importados.";
-                $tipoMensagem = "sucesso";
-                
-            }catch(Exception $e){
-                $mensagem = "Erro no banco!";
-                $tipoMensagem = "erro";
+                sleep(1);
             }
+
+
+            $mensagem = "Sucesso! $contagem filmes foram importados.";
+            $tipoMensagem = "sucesso";
+            
+        }catch(Exception $e){
+            echo $e;
+            echo "<br>";
+            $mensagem = "Erro no banco!";
+            $tipoMensagem = "erro";
         }
     }
 }

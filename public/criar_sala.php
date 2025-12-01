@@ -13,12 +13,23 @@ try {
     $pdo = conexao::conectar();
     $codigoSala = gerarCodigo();
 
+    $genero = $_POST['genero'];
+    if($genero === ''){
+        $genero = null;
+    }
+
+    $tipoMidia = $_POST['tipo_midia'];
+
     // Prepara o SQL para inserir a nova sala
-    $sql = "INSERT INTO rooms (code) VALUES (:code)";
+    $sql = "INSERT INTO rooms (code,genre,media_type) VALUES (:code,:genre,:media_type)";
     $stmt = $pdo->prepare($sql);
     
     // Executa a inserção
-    $stmt->execute(['code' => $codigoSala]);
+    $stmt->execute([
+        'code' => $codigoSala,
+        'genre' => $genero,
+        'media_type' => $tipoMidia
+    ]);
 
     // Redireciona o usuário para a "sala de espera/votação"
     // Vamos chamar de 'votar.php' (que faremos depois)
